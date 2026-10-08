@@ -27,6 +27,9 @@ func main() {
 		case "version", "--version", "-v":
 			fmt.Printf("%s version %s\n", AppName, Version)
 			return
+		case "invert":
+			runInvertCommand(os.Args[2:])
+			return
 		case "install":
 			runSelfInstall()
 			return
@@ -46,7 +49,9 @@ func main() {
 		rotateFlag   int
 		nonInteract  bool
 		splitOnly    bool
+		invertOnly   bool
 		omitBlank    bool
+		dpiFlag      int
 	)
 
 	fs := flag.NewFlagSet(AppName, flag.ContinueOnError)
@@ -58,6 +63,9 @@ func main() {
 	fs.IntVar(&rotateFlag, "rotate", -1, "Back page rotation")
 	fs.BoolVar(&nonInteract, "generate", false, "Generate front/back PDFs non-interactively and exit")
 	fs.BoolVar(&splitOnly, "split", false, "Split into odd/even PDFs non-interactively and exit")
+	fs.BoolVar(&invertOnly, "invert", false, "Invert colors (dark mode to light mode) and exit")
+	fs.BoolVar(&invertOnly, "i", false, "Invert colors")
+	fs.IntVar(&dpiFlag, "dpi", 200, "Resolution DPI for color inversion (default: 200)")
 	fs.BoolVar(&omitBlank, "omit-blank", false, "Omit blank page on odd page count (requires removing last sheet)")
 
 	// Find the pdf path argument (could be before or after flags)
@@ -160,6 +168,16 @@ func main() {
 		return
 	}
 
+	if invertOnly {
+		out, err := pdf.InvertPDF(ctx, info.Path, outDir, pdf.InvertOptions{DPI: dpiFlag})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Invert error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Inverted PDF generated: %s\n", out)
+		return
+	}
+
 	// Run interactive menu
 	runInteractiveLoop(ctx, info, &opts, outDir)
 }
@@ -184,6 +202,11 @@ func runInteractiveLoop(ctx context.Context, info *pdf.PDFInfo, opts *duplex.Opt
 				ID:          "gen_both",
 				Label:       "Generate front and back PDFs",
 				Description: fmt.Sprintf("Creates front.pdf and back.pdf in %s", filepath.Base(defaultDir)),
+			},
+			{
+				ID:          "invert",
+				Label:       "Invert colors (Dark mode to light mode / ink saver)",
+				Description: "Reverses colors (black background becomes white) to save printer ink",
 			},
 			{
 				ID:          "split_odd_even",
@@ -248,6 +271,25 @@ func runInteractiveLoop(ctx context.Context, info *pdf.PDFInfo, opts *duplex.Opt
 			}
 			ui.WaitEnter("")
 
+		case "invert":
+			fmt.Printf("\r\n%sInverting colors for %s (DPI: 200)...%s\r\n", ui.Bold, info.Filename, ui.Reset)
+			outPath, err := pdf.InvertPDF(ctx, info.Path, "", pdf.InvertOptions{DPI: 200})
+			if err != nil {
+				fmt.Printf("%sInversion failed:%s %v\r\n", ui.FgRed, ui.Reset, err)
+			} else {
+				fmt.Printf("\r\n%s%s✓ Successfully inverted PDF:%s %s\r\n", ui.Bold, ui.FgGreen, ui.Reset, outPath)
+				if ui.Confirm("Would you like to switch active document to this inverted PDF for printing?", true) {
+					newInfo, err := pdf.InspectPDF(ctx, outPath)
+					if err == nil {
+						info = newInfo
+						base := strings.TrimSuffix(filepath.Base(outPath), filepath.Ext(outPath))
+						defaultDir = filepath.Join(filepath.Dir(outPath), base+"-duplex")
+						fmt.Printf("%s%s✓ Active document switched to: %s%s\r\n", ui.Bold, ui.FgCyan, info.Filename, ui.Reset)
+					}
+				}
+			}
+			ui.WaitEnter("")
+
 		case "split_odd_even":
 			odd, even, err := pdf.SplitOddEven(ctx, info.Path, "")
 			if err != nil {
@@ -307,6 +349,46 @@ func runInteractiveLoop(ctx context.Context, info *pdf.PDFInfo, opts *duplex.Opt
 	}
 }
 
+func runInvertCommand(args []string) {
+	var outPath string
+	var dpi int
+	fs := flag.NewFlagSet("invert", flag.ContinueOnError)
+	fs.StringVar(&outPath, "o", "", "Output PDF path (default: <filename>-inverted.pdf)")
+	fs.StringVar(&outPath, "output", "", "Output PDF path")
+	fs.IntVar(&dpi, "dpi", 200, "Rendering resolution in DPI (default: 200)")
+
+	var positionalArgs []string
+	var flagArgs []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if strings.HasPrefix(arg, "-") {
+			flagArgs = append(flagArgs, arg)
+			if (arg == "-o" || arg == "--output" || arg == "--dpi") && i+1 < len(args) {
+				i++
+				flagArgs = append(flagArgs, args[i])
+			}
+		} else {
+			positionalArgs = append(positionalArgs, arg)
+		}
+	}
+
+	_ = fs.Parse(flagArgs)
+	if len(positionalArgs) == 0 {
+		fmt.Println("Usage: duplex invert <file.pdf> [-o output.pdf] [--dpi 200]")
+		os.Exit(1)
+	}
+
+	target := positionalArgs[0]
+	ctx := context.Background()
+	fmt.Printf("Inverting colors for: %s (DPI: %d)...\n", target, dpi)
+	out, err := pdf.InvertPDF(ctx, target, outPath, pdf.InvertOptions{DPI: dpi})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("✓ Inverted PDF generated successfully: %s\n", out)
+}
+
 func printHelp() {
 	fmt.Printf("%s%s - Manual Double-Sided PDF Printing Utility%s\n\n", ui.Bold, AppName, ui.Reset)
 	fmt.Println("SYNOPSIS:")
@@ -314,6 +396,7 @@ func printHelp() {
 	fmt.Println("  duplex [command]")
 	fmt.Println()
 	fmt.Println("COMMANDS:")
+	fmt.Println("  invert <file>  Invert PDF colors (convert dark mode to white for ink saving)")
 	fmt.Println("  install        Install duplex executable globally to PATH")
 	fmt.Println("  uninstall      Remove globally installed duplex executable")
 	fmt.Println("  version        Show duplex version")
@@ -324,6 +407,8 @@ func printHelp() {
 	fmt.Println("  -m, --mode <mode>     Paper reload mode: 'reverse' (default) or 'forward'")
 	fmt.Println("  -r, --rotate <deg>    Back page rotation: 0, 180, or -1 (auto)")
 	fmt.Println("      --generate        Generate front and back PDFs non-interactively and exit")
+	fmt.Println("  -i, --invert          Invert PDF colors and exit")
+	fmt.Println("      --dpi <n>         DPI resolution for color inversion (default: 200)")
 	fmt.Println("      --split           Split into odd and even PDFs non-interactively and exit")
 	fmt.Println("      --omit-blank      Omit blank page on odd counts (requires removing last sheet)")
 	fmt.Println("  -v, --version         Show version")
@@ -332,6 +417,9 @@ func printHelp() {
 	fmt.Println("EXAMPLES:")
 	fmt.Println("  # Launch interactive duplex menu for a document:")
 	fmt.Println("  duplex document.pdf")
+	fmt.Println()
+	fmt.Println("  # Invert dark-mode PDF to light-mode to save printer ink:")
+	fmt.Println("  duplex invert dark_document.pdf")
 	fmt.Println()
 	fmt.Println("  # Handles paths with spaces:")
 	fmt.Println("  duplex \"/Users/me/Documents/Annual Report 2026.pdf\"")

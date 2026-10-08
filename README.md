@@ -19,6 +19,7 @@
   - **Standard Flip (Reverse Back)**: Stack turned over directly (last sheet fed first). Default for standard desktop printers.
   - **Flip + Rotate 180°**: For calendar / notepad short-edge binding or head-to-toe printing.
   - **Forward Feed**: For bottom-feeding trays or manually re-collated stacks.
+- **Color Inversion (Dark Mode to Light Mode)**: Inverts PDF colors (e.g. converting solid black backgrounds to white and white text to black) to save massive amounts of printer ink and prevent paper soaking.
 - **Zero-Loss PDF Processing**: Powered by pure-Go PDF processing (`pdfcpu`). Preserves 100% of vector graphics, embedded fonts, media boxes, annotations, and metadata. No rasterization.
 - **Interactive Terminal UI**: Keyboard-driven interactive menu (arrow keys, Enter, Esc/q) with clear visual steps.
 - **Cross-Platform Printing Integration**: Directly print front and back sides via system spoolers (`lpr` / `lp` on macOS/Linux, PowerShell print on Windows) or open files in your default PDF viewer (macOS Preview, Acrobat, etc.).
@@ -192,9 +193,12 @@ A blank page is automatically inserted at page position 1 of `back.pdf`. You can
 
 | Flag / Option | Description |
 | :--- | :--- |
+| `duplex invert <file>` | Invert PDF colors (convert dark mode to white for ink saving) |
+| `-i, --invert` | Invert PDF colors non-interactively and exit |
+| `--dpi <n>` | Resolution DPI for color inversion (default: `200`) |
 | `--generate` | Generate `front.pdf` and `back.pdf` non-interactively and exit |
 | `--split` | Generate `odd.pdf` and `even.pdf` non-interactively and exit |
-| `-o, --output <dir>` | Specify custom output directory (default: `<filename>-duplex`) |
+| `-o, --output <dir>` | Specify custom output directory or file path |
 | `-m, --mode <mode>` | Flip mode: `reverse` (default) or `forward` |
 | `-r, --rotate <deg>` | Back side rotation in degrees: `0`, `180`, or `-1` (auto) |
 | `--omit-blank` | Omit blank page on odd page counts (requires manual removal of last sheet) |
@@ -204,6 +208,11 @@ A blank page is automatically inserted at page position 1 of `back.pdf`. You can
 ### Script Examples
 
 ```bash
+# Invert dark-mode PDF to white background (saves toner/ink):
+duplex invert dark_document.pdf
+# Or specify custom output name:
+duplex invert dark_document.pdf -o light_document.pdf
+
 # Generate duplex PDFs into a custom directory
 duplex report.pdf --generate -o ./print-jobs
 
