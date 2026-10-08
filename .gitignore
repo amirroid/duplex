@@ -1,0 +1,15 @@
+# Binaries
+duplex
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Directories
+dist/
+*-duplex/
+*-split/
+.tmp/
+
+# OS files
+.DS_Store
