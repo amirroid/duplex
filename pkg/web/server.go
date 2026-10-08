@@ -69,6 +69,7 @@ func NewHandler() http.Handler {
 
 	// Static assets
 	mux.HandleFunc("/static/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		path := strings.TrimPrefix(r.URL.Path, "/")
 		data, err := staticFS.ReadFile(path)
 		if err != nil {
@@ -83,6 +84,15 @@ func NewHandler() http.Handler {
 		_, _ = w.Write(data)
 	})
 
+	// Service Worker uninstaller to clear stale client cache
+	mux.HandleFunc("/sw.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		w.Header().Set("Service-Worker-Allowed", "/")
+		unreg := `self.addEventListener('install', () => self.skipWaiting()); self.addEventListener('activate', () => { self.registration.unregister(); if (typeof caches !== 'undefined') { caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))); } });`
+		_, _ = w.Write([]byte(unreg))
+	})
+
 	// Index page
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
@@ -95,6 +105,7 @@ func NewHandler() http.Handler {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		_, _ = w.Write(data)
 	})
 

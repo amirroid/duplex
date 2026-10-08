@@ -1,4 +1,21 @@
-// duplex Web GUI Client
+// duplex Web GUI Client - Go Engine Backend
+
+// Automatically clear any stale Service Worker or offline Cache from previous sessions
+if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+  navigator.serviceWorker.getRegistrations().then((registrations) => {
+    for (const reg of registrations) {
+      reg.unregister();
+    }
+  });
+}
+if (typeof window !== "undefined" && "caches" in window) {
+  caches.keys().then((names) => {
+    for (const name of names) {
+      caches.delete(name);
+    }
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   initTheme();
   initTabs();

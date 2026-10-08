@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -61,26 +63,29 @@ func InspectPDF(ctx context.Context, pdfPath string) (*PDFInfo, error) {
 		return nil, fmt.Errorf("path is a directory, not a PDF file: %s", pdfPath)
 	}
 
+	pageCount, err := getPageCount(ctx, pdfPath)
+	if err != nil || pageCount < 1 {
+		return nil, fmt.Errorf("invalid or corrupted PDF file: %s", pdfPath)
+	}
+
+	w := 595.28 // default A4 width in pts
+	h := 841.89 // default A4 height in pts
+
+	// Try reading dimensions via pdfcpu with relaxed validation
 	conf := model.NewDefaultConfiguration()
-	if err := api.ValidateFile(ctx, pdfPath, conf, nil); err != nil {
-		return nil, fmt.Errorf("invalid or corrupted PDF file: %w", err)
-	}
-
-	pageCount, err := api.PageCountFile(ctx, pdfPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read page count: %w", err)
-	}
-	if pageCount < 1 {
-		return nil, fmt.Errorf("PDF contains no pages")
-	}
-
+	conf.ValidationMode = model.ValidationRelaxed
 	dims, err := api.PageDimsFile(ctx, pdfPath)
-	if err != nil || len(dims) == 0 {
-		return nil, fmt.Errorf("failed to read page dimensions: %w", err)
+	if err == nil && len(dims) > 0 {
+		w = dims[0].Width
+		h = dims[0].Height
+	} else {
+		// Fallback to pdfinfo for dimensions
+		if infoW, infoH, err := getDimsFromPDFInfo(ctx, pdfPath); err == nil {
+			w = infoW
+			h = infoH
+		}
 	}
 
-	w := dims[0].Width
-	h := dims[0].Height
 	orient := duplex.OrientationPortrait
 	if w > h {
 		orient = duplex.OrientationLandscape
@@ -95,6 +100,24 @@ func InspectPDF(ctx context.Context, pdfPath string) (*PDFInfo, error) {
 		Orientation: orient,
 		FileSize:    fi.Size(),
 	}, nil
+}
+
+func getDimsFromPDFInfo(ctx context.Context, pdfPath string) (float64, float64, error) {
+	cmd := exec.CommandContext(ctx, "pdfinfo", pdfPath)
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, 0, err
+	}
+	re := regexp.MustCompile(`Page size:\s*([0-9.]+)\s*x\s*([0-9.]+)`)
+	m := re.FindStringSubmatch(string(out))
+	if len(m) > 2 {
+		w, err1 := strconv.ParseFloat(m[1], 64)
+		h, err2 := strconv.ParseFloat(m[2], 64)
+		if err1 == nil && err2 == nil && w > 0 && h > 0 {
+			return w, h, nil
+		}
+	}
+	return 0, 0, fmt.Errorf("could not extract page size from pdfinfo")
 }
 
 // DuplexResult contains the paths to the generated duplex PDF files.
@@ -134,6 +157,7 @@ func GenerateDuplex(ctx context.Context, inputPDF, outputDir string, plan *duple
 	}
 
 	conf := model.NewDefaultConfiguration()
+	conf.ValidationMode = model.ValidationRelaxed
 
 	// 1. Generate Front PDF
 	frontStrs := make([]string, len(plan.FrontPages))
@@ -147,7 +171,7 @@ func GenerateDuplex(ctx context.Context, inputPDF, outputDir string, plan *duple
 		return nil, fmt.Errorf("failed to generate front PDF: %w", err)
 	}
 
-	frontCount, err := api.PageCountFile(ctx, frontPath)
+	frontCount, err := getPageCount(ctx, frontPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify front PDF: %w", err)
 	}
@@ -167,7 +191,7 @@ func GenerateDuplex(ctx context.Context, inputPDF, outputDir string, plan *duple
 			}
 		}
 
-		backCount, err = api.PageCountFile(ctx, backPath)
+		backCount, err = getPageCount(ctx, backPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to verify back PDF: %w", err)
 		}
@@ -207,6 +231,7 @@ func SplitOddEven(ctx context.Context, inputPDF, outputDir string) (oddPath, eve
 	evenPath = filepath.Join(outputDir, "even.pdf")
 
 	conf := model.NewDefaultConfiguration()
+	conf.ValidationMode = model.ValidationRelaxed
 
 	var oddPages []string
 	var evenPages []string
@@ -254,11 +279,14 @@ func generateBackFile(ctx context.Context, inPDF, outPDF string, backPages []int
 
 	// Case 2: Only blank pages (e.g. 1-page PDF where back is solely blank)
 	if len(nonZeroPages) == 0 {
+		w, h := 595.28, 841.89
 		dims, err := api.PageDimsFile(ctx, inPDF)
-		if err != nil || len(dims) == 0 {
-			return fmt.Errorf("reading dimensions: %w", err)
+		if err == nil && len(dims) > 0 {
+			w, h = dims[0].Width, dims[0].Height
+		} else if infoW, infoH, err := getDimsFromPDFInfo(ctx, inPDF); err == nil {
+			w, h = infoW, infoH
 		}
-		return createBlankPDF(outPDF, dims[0].Width, dims[0].Height, len(backPages))
+		return createBlankPDF(outPDF, w, h, len(backPages))
 	}
 
 	// Case 3: Mixed non-zero pages and blanks
