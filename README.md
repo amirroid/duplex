@@ -19,6 +19,8 @@
   - **Standard Flip (Reverse Back)**: Stack turned over directly (last sheet fed first). Default for standard desktop printers.
   - **Flip + Rotate 180°**: For calendar / notepad short-edge binding or head-to-toe printing.
   - **Forward Feed**: For bottom-feeding trays or manually re-collated stacks.
+- **PDF Merging (`duplex merge`)**: Concatenate multiple PDF files into a single clean document with zero quality loss. Reorder files visually in the GUI or pass arguments directly in the CLI.
+- **Embedded Web GUI (`duplex gui`)**: Minimalist, responsive web interface accessible from both desktop browsers and mobile devices over local Wi-Fi. Features drag-and-drop, dark/light theme, live page inspection, manual duplex zip downloads, color inversion, and PDF merging.
 - **Color Inversion (Dark Mode to Light Mode)**: Inverts PDF colors (e.g. converting solid black backgrounds to white and white text to black) to save massive amounts of printer ink and prevent paper soaking.
 - **Zero-Loss PDF Processing**: Powered by pure-Go PDF processing (`pdfcpu`). Preserves 100% of vector graphics, embedded fonts, media boxes, annotations, and metadata. No rasterization.
 - **Interactive Terminal UI**: Keyboard-driven interactive menu (arrow keys, Enter, Esc/q) with clear visual steps.
@@ -208,6 +210,12 @@ A blank page is automatically inserted at page position 1 of `back.pdf`. You can
 ### Script Examples
 
 ```bash
+# Launch minimal Web GUI (usable on desktop & mobile phones):
+duplex gui
+
+# Merge multiple PDFs into one:
+duplex merge part1.pdf part2.pdf part3.pdf -o merged_book.pdf
+
 # Invert dark-mode PDF to white background (saves toner/ink):
 duplex invert dark_document.pdf
 # Or specify custom output name:

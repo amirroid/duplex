@@ -14,6 +14,7 @@ import (
 	"duplex/pkg/pdf"
 	"duplex/pkg/print"
 	"duplex/pkg/ui"
+	"duplex/pkg/web"
 )
 
 const (
@@ -26,6 +27,12 @@ func main() {
 		switch os.Args[1] {
 		case "version", "--version", "-v":
 			fmt.Printf("%s version %s\n", AppName, Version)
+			return
+		case "merge":
+			runMergeCommand(os.Args[2:])
+			return
+		case "gui", "web", "serve":
+			runGUICommand(os.Args[2:])
 			return
 		case "invert":
 			runInvertCommand(os.Args[2:])
@@ -204,6 +211,16 @@ func runInteractiveLoop(ctx context.Context, info *pdf.PDFInfo, opts *duplex.Opt
 				Description: fmt.Sprintf("Creates front.pdf and back.pdf in %s", filepath.Base(defaultDir)),
 			},
 			{
+				ID:          "merge",
+				Label:       "Merge multiple PDFs into one",
+				Description: "Combine multiple PDF documents into a single file",
+			},
+			{
+				ID:          "gui",
+				Label:       "Launch Web GUI (Desktop & Mobile)",
+				Description: "Opens beautiful visual interface in your browser",
+			},
+			{
 				ID:          "invert",
 				Label:       "Invert colors (Dark mode to light mode / ink saver)",
 				Description: "Reverses colors (black background becomes white) to save printer ink",
@@ -342,10 +359,96 @@ func runInteractiveLoop(ctx context.Context, info *pdf.PDFInfo, opts *duplex.Opt
 		case "info":
 			ui.ShowPDFDetails(info)
 
+		case "merge":
+			fmt.Printf("\r\n%sMerge PDFs%s\r\n", ui.Bold, ui.Reset)
+			fmt.Println("Enter additional PDF file paths to merge with current document (separated by comma):")
+			line := ui.PromptString("Additional PDF file(s):")
+			parts := strings.Split(line, ",")
+			files := []string{info.Path}
+			for _, p := range parts {
+				clean := strings.Trim(strings.TrimSpace(p), `"'`)
+				if clean != "" {
+					files = append(files, clean)
+				}
+			}
+			if len(files) < 2 {
+				fmt.Printf("%sNeed at least 1 additional PDF to merge.%s\r\n", ui.FgYellow, ui.Reset)
+				ui.WaitEnter("")
+				continue
+			}
+			outPath, err := pdf.MergePDFs(ctx, files, "", false)
+			if err != nil {
+				fmt.Printf("%sMerge failed:%s %v\r\n", ui.FgRed, ui.Reset, err)
+			} else {
+				fmt.Printf("\r\n%s%s✓ Successfully merged into:%s %s\r\n", ui.Bold, ui.FgGreen, ui.Reset, outPath)
+			}
+			ui.WaitEnter("")
+
+		case "gui":
+			fmt.Printf("\r\n%sLaunching Web GUI (Desktop & Mobile)...%s\r\n", ui.Bold, ui.Reset)
+			if err := web.StartServer(8080, true); err != nil {
+				fmt.Printf("%sServer error:%s %v\r\n", ui.FgRed, ui.Reset, err)
+				ui.WaitEnter("")
+			}
+
 		case "open_dir":
 			_ = os.MkdirAll(defaultDir, 0755)
 			_ = print.OpenFolder(defaultDir)
 		}
+	}
+}
+
+func runMergeCommand(args []string) {
+	fs := flag.NewFlagSet("merge", flag.ContinueOnError)
+	var outPath string
+	var divider bool
+	fs.StringVar(&outPath, "o", "", "Output merged PDF path (default: <first_name>-merged.pdf)")
+	fs.StringVar(&outPath, "output", "", "Output merged PDF path")
+	fs.BoolVar(&divider, "divider", false, "Insert blank divider page between merged documents")
+
+	var positionalArgs []string
+	var flagArgs []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if strings.HasPrefix(arg, "-") {
+			flagArgs = append(flagArgs, arg)
+			if (arg == "-o" || arg == "--output") && i+1 < len(args) {
+				i++
+				flagArgs = append(flagArgs, args[i])
+			}
+		} else {
+			positionalArgs = append(positionalArgs, arg)
+		}
+	}
+
+	_ = fs.Parse(flagArgs)
+	if len(positionalArgs) < 2 {
+		fmt.Println("Usage: duplex merge <file1.pdf> <file2.pdf> [file3.pdf...] [-o output.pdf] [--divider]")
+		os.Exit(1)
+	}
+
+	ctx := context.Background()
+	fmt.Printf("Merging %d PDF files...\n", len(positionalArgs))
+	out, err := pdf.MergePDFs(ctx, positionalArgs, outPath, divider)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("✓ Merged PDF generated successfully: %s\n", out)
+}
+
+func runGUICommand(args []string) {
+	fs := flag.NewFlagSet("gui", flag.ContinueOnError)
+	var port int
+	var noOpen bool
+	fs.IntVar(&port, "p", 8080, "Port to listen on (default: 8080)")
+	fs.IntVar(&port, "port", 8080, "Port to listen on (default: 8080)")
+	fs.BoolVar(&noOpen, "no-open", false, "Do not open browser automatically")
+
+	_ = fs.Parse(args)
+	if err := web.StartServer(port, !noOpen); err != nil {
+		fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
+		os.Exit(1)
 	}
 }
 
@@ -396,6 +499,8 @@ func printHelp() {
 	fmt.Println("  duplex [command]")
 	fmt.Println()
 	fmt.Println("COMMANDS:")
+	fmt.Println("  merge <files>  Merge multiple PDF files into a single document")
+	fmt.Println("  gui            Launch beautiful minimal Web GUI for mobile & desktop")
 	fmt.Println("  invert <file>  Invert PDF colors (convert dark mode to white for ink saving)")
 	fmt.Println("  install        Install duplex executable globally to PATH")
 	fmt.Println("  uninstall      Remove globally installed duplex executable")
@@ -417,6 +522,12 @@ func printHelp() {
 	fmt.Println("EXAMPLES:")
 	fmt.Println("  # Launch interactive duplex menu for a document:")
 	fmt.Println("  duplex document.pdf")
+	fmt.Println()
+	fmt.Println("  # Launch minimal Web GUI (accessible from desktop and mobile):")
+	fmt.Println("  duplex gui")
+	fmt.Println()
+	fmt.Println("  # Merge multiple PDFs into one:")
+	fmt.Println("  duplex merge file1.pdf file2.pdf -o merged.pdf")
 	fmt.Println()
 	fmt.Println("  # Invert dark-mode PDF to light-mode to save printer ink:")
 	fmt.Println("  duplex invert dark_document.pdf")
