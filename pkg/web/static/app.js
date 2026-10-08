@@ -1,13 +1,6 @@
-// Duplex Web & Mobile PWA Client
-// Supports 100% Offline On-Device PDF Processing via Go WebAssembly
-
-let wasmEngineReady = false;
-let deferredInstallPrompt = null;
-
+// duplex Web GUI Client
 document.addEventListener("DOMContentLoaded", () => {
   initTheme();
-  initPWA();
-  initWasmEngine();
   initTabs();
   initMerge();
   initDuplex();
@@ -15,120 +8,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initSplit();
 });
 
-// ================= PWA & SERVICE WORKER =================
-function initPWA() {
-  // 1. Register Service Worker for offline capability
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker
-      .register("/sw.js", { scope: "/" })
-      .then((reg) => {
-        console.log("✓ Service Worker registered successfully, scope:", reg.scope);
-      })
-      .catch((err) => {
-        console.warn("Service Worker registration failed:", err);
-      });
-  }
-
-  // 2. Handle PWA Install Prompt (Android & Desktop Chrome)
-  const installBtn = document.getElementById("installBtn");
-  window.addEventListener("beforeinstallprompt", (e) => {
-    e.preventDefault();
-    deferredInstallPrompt = e;
-    if (installBtn) {
-      installBtn.style.display = "flex";
-    }
-  });
-
-  if (installBtn) {
-    installBtn.addEventListener("click", async () => {
-      if (deferredInstallPrompt) {
-        deferredInstallPrompt.prompt();
-        const { outcome } = await deferredInstallPrompt.userChoice;
-        if (outcome === "accepted") {
-          installBtn.style.display = "none";
-        }
-        deferredInstallPrompt = null;
-      } else {
-        // Check if iOS device
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-        if (isIOS) {
-          showIOSInstallModal();
-        } else {
-          alert("برای نصب برنامه، از منوی مرورگر خود گزینه Add to Home screen یا Install App را انتخاب کنید.");
-        }
-      }
-    });
-  }
-
-  // Detect if already installed (standalone mode)
-  if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true) {
-    if (installBtn) installBtn.style.display = "none";
-  }
-
-  // iOS modal close triggers
-  document.getElementById("iosModalClose")?.addEventListener("click", hideIOSInstallModal);
-  document.getElementById("iosModalDone")?.addEventListener("click", hideIOSInstallModal);
-  document.getElementById("iosModalBackdrop")?.addEventListener("click", (e) => {
-    if (e.target.id === "iosModalBackdrop") hideIOSInstallModal();
-  });
-}
-
-function showIOSInstallModal() {
-  const modal = document.getElementById("iosModalBackdrop");
-  if (modal) modal.style.display = "flex";
-}
-
-function hideIOSInstallModal() {
-  const modal = document.getElementById("iosModalBackdrop");
-  if (modal) modal.style.display = "none";
-}
-
-// ================= WEBASSEMBLY ENGINE =================
-async function initWasmEngine() {
-  const engineDot = document.getElementById("engineDot");
-  const engineStatus = document.getElementById("engineStatus");
-
-  if (typeof Go === "undefined") {
-    console.warn("wasm_exec.js not loaded; fallback to server API");
-    return;
-  }
-
-  try {
-    if (engineDot) engineDot.classList.add("loading");
-    if (engineStatus) engineStatus.textContent = "در حال بارگذاری...";
-
-    const go = new Go();
-    const wasmRes = await fetch("/static/duplex.wasm");
-    if (!wasmRes.ok) {
-      throw new Error("Failed to load duplex.wasm: " + wasmRes.statusText);
-    }
-
-    const wasmBytes = await wasmRes.arrayBuffer();
-    const { instance } = await WebAssembly.instantiate(wasmBytes, go.importObject);
-    go.run(instance);
-
-    wasmEngineReady = true;
-    if (engineDot) {
-      engineDot.classList.remove("loading");
-      engineDot.style.background = "#10b981";
-    }
-    if (engineStatus) {
-      engineStatus.textContent = "آفلاین روی گوشی";
-    }
-    console.log("⚡ Duplex WebAssembly engine running locally on device (100% offline)");
-  } catch (err) {
-    console.warn("WASM engine init notice (fallback to server):", err);
-    if (engineDot) {
-      engineDot.classList.remove("loading");
-      engineDot.style.background = "#3b82f6";
-    }
-    if (engineStatus) {
-      engineStatus.textContent = "آنلاین";
-    }
-  }
-}
-
-// ================= THEME & TABS =================
+// Theme Toggle
 function initTheme() {
   const toggle = document.getElementById("themeToggle");
   const saved = localStorage.getItem("duplex_theme") || "dark";
@@ -142,6 +22,7 @@ function initTheme() {
   });
 }
 
+// Tab Navigation
 function initTabs() {
   const tabs = document.querySelectorAll(".nav-tab");
   const panels = document.querySelectorAll(".panel");
@@ -158,23 +39,13 @@ function initTabs() {
   });
 }
 
+// Format Helpers
 function formatBytes(bytes) {
   if (bytes === 0) return "0 B";
   const k = 1024;
   const sizes = ["B", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
-}
-
-function downloadBlob(blob, filename) {
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  window.URL.revokeObjectURL(url);
 }
 
 // ================= MERGE TAB =================
@@ -194,7 +65,9 @@ function initMerge() {
     dropzone.classList.add("drag-over");
   });
 
-  dropzone.addEventListener("dragleave", () => dropzone.classList.remove("drag-over"));
+  dropzone.addEventListener("dragleave", () => {
+    dropzone.classList.remove("drag-over");
+  });
 
   dropzone.addEventListener("drop", (e) => {
     e.preventDefault();
@@ -245,7 +118,7 @@ function initMerge() {
     });
 
     list.querySelectorAll("button[data-action]").forEach((btn) => {
-      btn.addEventListener("click", () => {
+      btn.addEventListener("click", (e) => {
         const action = btn.dataset.action;
         const idx = parseInt(btn.dataset.index, 10);
         if (action === "up" && idx > 0) {
@@ -271,34 +144,28 @@ function initMerge() {
     alertBox.style.display = "none";
 
     try {
-      // 1. Try Client-side WebAssembly Engine (100% Offline)
-      if (wasmEngineReady && window.duplexWasm) {
-        const buffers = await Promise.all(mergeFiles.map((f) => f.arrayBuffer()));
-        const uint8Arrays = buffers.map((b) => new Uint8Array(b));
-        const res = window.duplexWasm.merge(uint8Arrays, false);
-
-        if (!res.success) {
-          throw new Error(res.error || "Client merge failed");
-        }
-
-        const blob = new Blob([res.merged_pdf], { type: "application/pdf" });
-        downloadBlob(blob, "merged.pdf");
-
-        alertBox.className = "alert alert-success";
-        alertBox.textContent = `✓ ادغام ${mergeFiles.length} فایل به صورت مستقیم در گوشی با موفقیت انجام شد!`;
-        alertBox.style.display = "flex";
-        return;
-      }
-
-      // 2. Fallback to Server API
       const formData = new FormData();
       mergeFiles.forEach((file) => formData.append("files", file));
 
-      const res = await fetch("/api/merge", { method: "POST", body: formData });
-      if (!res.ok) throw new Error(await res.text());
+      const res = await fetch("/api/merge", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(err || "Merge failed");
+      }
 
       const blob = await res.blob();
-      downloadBlob(blob, "merged.pdf");
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "merged.pdf";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
 
       alertBox.className = "alert alert-success";
       alertBox.textContent = `✓ Successfully merged ${mergeFiles.length} files into merged.pdf!`;
@@ -358,26 +225,7 @@ function initDuplex() {
     details.style.display = "block";
     generateBtn.disabled = false;
 
-    // Inspect: try WASM first
-    if (wasmEngineReady && window.duplexWasm) {
-      try {
-        const buf = await file.arrayBuffer();
-        const uint8 = new Uint8Array(buf);
-        const res = window.duplexWasm.inspect(uint8, file.name);
-        if (res.success && res.info) {
-          const info = res.info;
-          const sheets = Math.ceil(info.page_count / 2);
-          document.getElementById("duplexPageCount").textContent = `${info.page_count} pages`;
-          document.getElementById("duplexSheetCount").textContent = `${sheets} sheets`;
-          document.getElementById("duplexFormat").textContent = `${info.orientation} (${Math.round(info.width_pt / 72 * 25.4)}x${Math.round(info.height_pt / 72 * 25.4)} mm)`;
-          return;
-        }
-      } catch (e) {
-        console.warn("WASM inspect error:", e);
-      }
-    }
-
-    // Server inspect fallback
+    // Inspect
     try {
       const fd = new FormData();
       fd.append("file", file);
@@ -387,7 +235,7 @@ function initDuplex() {
         const sheets = Math.ceil(info.page_count / 2);
         document.getElementById("duplexPageCount").textContent = `${info.page_count} pages`;
         document.getElementById("duplexSheetCount").textContent = `${sheets} sheets`;
-        document.getElementById("duplexFormat").textContent = `${info.orientation} (${Math.round(info.width_pt / 72 * 25.4)}x${Math.round(info.height_pt / 72 * 25.4)} mm)`;
+        document.getElementById("duplexFormat").textContent = `${info.orientation} (${Math.round(info.width_pt/72*25.4)}x${Math.round(info.height_pt/72*25.4)} mm)`;
       }
     } catch (_) {}
   }
@@ -413,32 +261,6 @@ function initDuplex() {
     alertBox.style.display = "none";
 
     try {
-      const base = duplexFile.name.replace(/\.pdf$/i, "");
-
-      // 1. Client-Side WebAssembly Engine
-      if (wasmEngineReady && window.duplexWasm) {
-        const buf = await duplexFile.arrayBuffer();
-        const uint8 = new Uint8Array(buf);
-        const res = window.duplexWasm.generateDuplex(uint8, {
-          mode: selectedMode,
-          rotate: selectedRotate,
-          odd_page: "blank"
-        });
-
-        if (!res.success) {
-          throw new Error(res.error || "WASM duplex generation failed");
-        }
-
-        const zipBlob = new Blob([res.zip], { type: "application/zip" });
-        downloadBlob(zipBlob, `${base}-duplex.zip`);
-
-        alertBox.className = "alert alert-success";
-        alertBox.textContent = `✓ فایل‌های front.pdf و back.pdf به صورت زیپ آماده و دانلود شدند! (${res.plan.total_sheets} برگ کاغذ)`;
-        alertBox.style.display = "flex";
-        return;
-      }
-
-      // 2. Server API Fallback
       const fd = new FormData();
       fd.append("file", duplexFile);
       fd.append("flip_mode", selectedMode);
@@ -448,7 +270,15 @@ function initDuplex() {
       if (!res.ok) throw new Error(await res.text());
 
       const blob = await res.blob();
-      downloadBlob(blob, `${base}-duplex.zip`);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const base = duplexFile.name.replace(/\.pdf$/i, "");
+      a.download = `${base}-duplex.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
 
       alertBox.className = "alert alert-success";
       alertBox.textContent = "✓ Front & Back PDFs generated! Downloaded ZIP containing front.pdf and back.pdf.";
@@ -514,8 +344,15 @@ function initInvert() {
       if (!res.ok) throw new Error(await res.text());
 
       const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
       const base = invertFile.name.replace(/\.pdf$/i, "");
-      downloadBlob(blob, `${base}-inverted.pdf`);
+      a.download = `${base}-inverted.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
 
       alertBox.className = "alert alert-success";
       alertBox.textContent = "✓ Inverted PDF generated! Black backgrounds converted to white.";
@@ -572,35 +409,6 @@ function initSplit() {
     alertBox.style.display = "none";
 
     try {
-      const base = splitFile.name.replace(/\.pdf$/i, "");
-
-      // 1. Try Client-side WASM engine
-      if (wasmEngineReady && window.duplexWasm) {
-        const buf = await splitFile.arrayBuffer();
-        const uint8 = new Uint8Array(buf);
-        const res = window.duplexWasm.split(uint8);
-
-        if (!res.success) throw new Error(res.error || "WASM split failed");
-
-        // Download odd pages
-        const oddBlob = new Blob([res.odd_pdf], { type: "application/pdf" });
-        downloadBlob(oddBlob, `${base}-odd.pdf`);
-
-        // Download even pages if exists
-        if (res.even_pdf) {
-          setTimeout(() => {
-            const evenBlob = new Blob([res.even_pdf], { type: "application/pdf" });
-            downloadBlob(evenBlob, `${base}-even.pdf`);
-          }, 350);
-        }
-
-        alertBox.className = "alert alert-success";
-        alertBox.textContent = "✓ صفحات زوج و فرد به صورت مجزا دانلود شدند!";
-        alertBox.style.display = "flex";
-        return;
-      }
-
-      // 2. Fallback to Server API
       const fd = new FormData();
       fd.append("file", splitFile);
 
@@ -608,7 +416,15 @@ function initSplit() {
       if (!res.ok) throw new Error(await res.text());
 
       const blob = await res.blob();
-      downloadBlob(blob, `${base}-split.zip`);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const base = splitFile.name.replace(/\.pdf$/i, "");
+      a.download = `${base}-split.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
 
       alertBox.className = "alert alert-success";
       alertBox.textContent = "✓ Split completed! Downloaded ZIP with odd.pdf and even.pdf.";

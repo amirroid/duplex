@@ -80,39 +80,6 @@ func TestWebHandler_StaticAndStatus(t *testing.T) {
 		t.Errorf("unexpected content-type: %s", ct)
 	}
 
-	// Test manifest.json
-	req = httptest.NewRequest(http.MethodGet, "/manifest.json", nil)
-	rr = httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200 OK for /manifest.json, got %d", rr.Code)
-	}
-	if ct := rr.Header().Get("Content-Type"); !strings.Contains(ct, "manifest+json") {
-		t.Errorf("unexpected content-type for manifest: %s", ct)
-	}
-
-	// Test sw.js
-	req = httptest.NewRequest(http.MethodGet, "/sw.js", nil)
-	rr = httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200 OK for /sw.js, got %d", rr.Code)
-	}
-	if allowed := rr.Header().Get("Service-Worker-Allowed"); allowed != "/" {
-		t.Errorf("expected Service-Worker-Allowed: /, got %s", allowed)
-	}
-
-	// Test /static/duplex.wasm
-	req = httptest.NewRequest(http.MethodGet, "/static/duplex.wasm", nil)
-	rr = httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200 OK for /static/duplex.wasm, got %d", rr.Code)
-	}
-	if ct := rr.Header().Get("Content-Type"); ct != "application/wasm" {
-		t.Errorf("expected application/wasm, got %s", ct)
-	}
-
 	// Test /api/status
 	req = httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	rr = httptest.NewRecorder()

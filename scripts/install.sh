@@ -12,11 +12,8 @@ echo "==> Installing ${APP_NAME}..."
 
 # 1. Build binary if Go is available, or use existing binary
 if command -v go >/dev/null 2>&1; then
-    echo "==> Building ${APP_NAME} WebAssembly engine..."
+    echo "==> Building ${APP_NAME} using Go toolchain..."
     cd "${ROOT_DIR}"
-    cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" pkg/web/static/wasm_exec.js 2>/dev/null || true
-    GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o pkg/web/static/duplex.wasm cmd/wasm/main.go
-    echo "==> Building ${APP_NAME} binary using Go toolchain..."
     GOPROXY="https://proxy.golang.org,direct" GOSUMDB=off go build -ldflags="-s -w" -o "${ROOT_DIR}/${APP_NAME}" cmd/duplex/main.go
 elif [[ -f "${ROOT_DIR}/${APP_NAME}" ]]; then
     echo "==> Using pre-built ${APP_NAME} binary..."

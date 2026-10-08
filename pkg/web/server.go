@@ -79,49 +79,7 @@ func NewHandler() http.Handler {
 			w.Header().Set("Content-Type", "text/css; charset=utf-8")
 		} else if strings.HasSuffix(path, ".js") {
 			w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
-		} else if strings.HasSuffix(path, ".wasm") {
-			w.Header().Set("Content-Type", "application/wasm")
-		} else if strings.HasSuffix(path, ".json") {
-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		} else if strings.HasSuffix(path, ".png") {
-			w.Header().Set("Content-Type", "image/png")
-		} else if strings.HasSuffix(path, ".svg") {
-			w.Header().Set("Content-Type", "image/svg+xml")
 		}
-		_, _ = w.Write(data)
-	})
-
-	// PWA Manifest
-	mux.HandleFunc("/manifest.json", func(w http.ResponseWriter, r *http.Request) {
-		data, err := staticFS.ReadFile("static/manifest.json")
-		if err != nil {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "application/manifest+json; charset=utf-8")
-		_, _ = w.Write(data)
-	})
-
-	// PWA Service Worker (with root scope permission)
-	mux.HandleFunc("/sw.js", func(w http.ResponseWriter, r *http.Request) {
-		data, err := staticFS.ReadFile("static/sw.js")
-		if err != nil {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
-		w.Header().Set("Service-Worker-Allowed", "/")
-		_, _ = w.Write(data)
-	})
-
-	// Favicon
-	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
-		data, err := staticFS.ReadFile("static/favicon.png")
-		if err != nil {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "image/png")
 		_, _ = w.Write(data)
 	})
 
