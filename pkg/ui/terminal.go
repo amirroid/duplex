@@ -109,7 +109,8 @@ type MenuItem struct {
 
 // SelectMenu presents an interactive keyboard-navigable list.
 func SelectMenu(title string, items []MenuItem, defaultIndex int) (int, error) {
-	if !term.IsTerminal(int(os.Stdin.Fd())) {
+	fd := int(os.Stdin.Fd())
+	if !term.IsTerminal(fd) {
 		// Non-interactive fallback
 		return fallbackSelect(title, items, defaultIndex)
 	}
@@ -119,6 +120,13 @@ func SelectMenu(title string, items []MenuItem, defaultIndex int) (int, error) {
 		selected = 0
 	}
 
+	// Enter raw mode for the entire menu session
+	oldState, err := term.MakeRaw(fd)
+	if err != nil {
+		return fallbackSelect(title, items, defaultIndex)
+	}
+	defer term.Restore(fd, oldState)
+
 	// Hide cursor during navigation
 	fmt.Print(HideCursor)
 	defer fmt.Print(ShowCursor)
@@ -127,37 +135,40 @@ func SelectMenu(title string, items []MenuItem, defaultIndex int) (int, error) {
 	linesRendered := 0
 
 	for {
-		// Clear previously drawn menu
+		// Move cursor back up and clear on re-render
 		if !firstRender && linesRendered > 0 {
-			// Move cursor up linesRendered times and clear
-			fmt.Printf("\033[%dA\033[J", linesRendered)
+			fmt.Printf("\r\033[%dA", linesRendered)
 		}
 		firstRender = false
 
 		linesRendered = 0
 		if title != "" {
-			fmt.Printf("%s%s%s\r\n", Bold, title, Reset)
+			fmt.Printf("\033[2K%s%s%s\r\n", Bold, title, Reset)
 			linesRendered++
 		}
 
 		for i, item := range items {
 			if i == selected {
-				desc := ""
-				if item.Description != "" {
-					desc = fmt.Sprintf(" %s(%s)%s", Dim, item.Description, Reset)
-				}
-				fmt.Printf("  %s%s❯ %s%s%s\r\n", Bold, FgCyan, item.Label, Reset, desc)
+				fmt.Printf("\033[2K  %s%s❯ %s%s\r\n", Bold, FgCyan, item.Label, Reset)
 			} else {
-				desc := ""
-				if item.Description != "" {
-					desc = fmt.Sprintf(" %s(%s)%s", Dim, item.Description, Reset)
-				}
-				fmt.Printf("    %s%s%s\r\n", item.Label, Reset, desc)
+				fmt.Printf("\033[2K    %s%s\r\n", item.Label, Reset)
 			}
 			linesRendered++
 		}
 
-		key, _, err := ReadKey()
+		// Dedicated description bar at the bottom (guarantees fixed height, no line wrapping drift)
+		desc := ""
+		if selected >= 0 && selected < len(items) {
+			desc = items[selected].Description
+		}
+		if desc != "" {
+			fmt.Printf("\033[2K  %s%sℹ %s%s\r\n", Dim, FgYellow, desc, Reset)
+		} else {
+			fmt.Printf("\033[2K\r\n")
+		}
+		linesRendered++
+
+		key, _, err := readKeyFromFD(fd)
 		if err != nil {
 			return -1, err
 		}
@@ -176,11 +187,61 @@ func SelectMenu(title string, items []MenuItem, defaultIndex int) (int, error) {
 				selected = 0
 			}
 		case KeyEnter:
+			// Print a newline to leave the menu cleanly in place
+			fmt.Print("\r\n")
 			return selected, nil
 		case KeyEsc, KeyQuit:
+			fmt.Print("\r\n")
 			return -1, nil
 		}
 	}
+}
+
+// readKeyFromFD reads a single key in raw mode from the given file descriptor.
+func readKeyFromFD(fd int) (Key, rune, error) {
+	buf := make([]byte, 16)
+	n, err := os.Stdin.Read(buf)
+	if err != nil {
+		return KeyOther, 0, err
+	}
+
+	if n == 1 {
+		b := buf[0]
+		switch b {
+		case 3: // Ctrl+C
+			return KeyQuit, 0, nil
+		case 13, 10: // Enter
+			return KeyEnter, 0, nil
+		case 27: // Esc
+			return KeyEsc, 0, nil
+		case 'q', 'Q':
+			return KeyQuit, 'q', nil
+		case 'j', 'J':
+			return KeyDown, 'j', nil
+		case 'k', 'K':
+			return KeyUp, 'k', nil
+		default:
+			return KeyOther, rune(b), nil
+		}
+	}
+
+	// Escape sequences (arrows: \x1b[A, \x1b[B, \x1bOA, \x1bOB)
+	if n >= 3 && buf[0] == 27 {
+		if buf[1] == '[' || buf[1] == 'O' {
+			switch buf[2] {
+			case 'A': // Up
+				return KeyUp, 0, nil
+			case 'B': // Down
+				return KeyDown, 0, nil
+			case 'C': // Right
+				return KeyRight, 0, nil
+			case 'D': // Left
+				return KeyLeft, 0, nil
+			}
+		}
+	}
+
+	return KeyOther, 0, nil
 }
 
 // fallbackSelect provides line-based selection for non-TTY environments.
