@@ -37,8 +37,12 @@ fi
 TARGET_BIN="${TARGET_DIR}/${APP_NAME}"
 
 echo "==> Installing binary to ${TARGET_BIN}..."
+rm -f "${TARGET_BIN}"
 cp -f "${ROOT_DIR}/${APP_NAME}" "${TARGET_BIN}"
 chmod 755 "${TARGET_BIN}"
+if command -v codesign >/dev/null 2>&1; then
+    codesign -s - -f "${TARGET_BIN}" >/dev/null 2>&1 || true
+fi
 
 # 3. Ensure TARGET_DIR is on PATH
 PATH_CHECK=0

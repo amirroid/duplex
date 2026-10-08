@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -429,7 +430,11 @@ func copyExecutable(src, dst string) error {
 	if _, err := io.Copy(out, in); err != nil {
 		return err
 	}
-	return os.Chmod(dst, 0755)
+	if err := os.Chmod(dst, 0755); err != nil {
+		return err
+	}
+	_ = exec.Command("codesign", "-s", "-", "-f", dst).Run()
+	return nil
 }
 
 func ensurePathNotice(dir string) {
