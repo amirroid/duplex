@@ -2,11 +2,16 @@ BINARY_NAME=duplex
 VERSION=1.0.0
 LDFLAGS=-s -w
 
-.PHONY: all build test clean install uninstall cross-compile
+.PHONY: all build wasm test clean install uninstall cross-compile
 
 all: build test
 
-build:
+wasm:
+	@echo "==> Building WebAssembly engine..."
+	cp $$(go env GOROOT)/lib/wasm/wasm_exec.js pkg/web/static/wasm_exec.js
+	GOOS=js GOARCH=wasm go build -ldflags="$(LDFLAGS)" -o pkg/web/static/duplex.wasm cmd/wasm/main.go
+
+build: wasm
 	go build -ldflags="$(LDFLAGS)" -o $(BINARY_NAME) cmd/duplex/main.go
 
 test:

@@ -2,10 +2,16 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Duplex - PDF Utility</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Duplex">
+  <link rel="apple-touch-icon" href="/static/icon-192.png">
+  <link rel="icon" type="image/png" href="/static/favicon.png">
   <link rel="stylesheet" href="/static/app.css">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300e5a3' stroke-width='2'><path d='M6 9V2h12v7'/><path d='M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2'/><path d='M6 14h12v8H6z'/></svg>">
 </head>
 <body>
   <div class="bg-glow"></div>
@@ -20,11 +26,25 @@
       </div>
       <div>
         <span class="brand-title">duplex</span>
-        <span class="brand-tag">v1.0</span>
+        <span class="brand-tag">PWA</span>
       </div>
     </a>
 
     <div class="header-actions">
+      <div class="engine-badge" id="engineBadge" title="100% Offline On-Device Engine">
+        <span class="engine-dot" id="engineDot"></span>
+        <span id="engineStatus">آفلاین</span>
+      </div>
+
+      <button class="install-btn" id="installBtn" style="display: none;" title="Install App on Phone (نصب اپلیکیشن)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        <span>نصب اپلیکیشن</span>
+      </button>
+
       <button class="theme-toggle" id="themeToggle" title="Toggle Theme (تغییر تم)">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="5"/>
@@ -255,11 +275,37 @@
     </section>
   </main>
 
+  <!-- iOS Install Modal -->
+  <div class="ios-modal-backdrop" id="iosModalBackdrop" style="display: none;">
+    <div class="ios-modal">
+      <div class="ios-modal-header">
+        <h3>نصب اپلیکیشن روی آیفون (iOS)</h3>
+        <button class="ios-modal-close" id="iosModalClose">&times;</button>
+      </div>
+      <div class="ios-steps">
+        <div class="ios-step">
+          <span class="step-num">۱</span>
+          <p>در نوار پایین مرورگر سافاری روی دکمه <strong>Share</strong> (آیکون مربع با فلش رو به بالا) بزنید.</p>
+        </div>
+        <div class="ios-step">
+          <span class="step-num">۲</span>
+          <p>صفحه را کمی پایین بکشید و گزینه <strong>Add to Home Screen</strong> (افزودن به صفحه اصلی) را انتخاب کنید.</p>
+        </div>
+        <div class="ios-step">
+          <span class="step-num">۳</span>
+          <p>در بالای صفحه روی <strong>Add</strong> بزنید. اکنون Duplex مانند یک اپ اختصاصی روی صفحه گوشی شما قرار دارد!</p>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="iosModalDone" style="margin-top: 14px;">متوجه شدم</button>
+    </div>
+  </div>
+
   <footer>
     <p>duplex &copy; 2026 &bull; Fast, Minimal, Cross-Platform PDF Utility</p>
-    <p style="margin-top: 4px; font-size: 0.75rem;">Desktop & Mobile Friendly</p>
+    <p style="margin-top: 4px; font-size: 0.75rem;">100% Offline On-Device Mobile App (PWA)</p>
   </footer>
 
+  <script src="/static/wasm_exec.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>
