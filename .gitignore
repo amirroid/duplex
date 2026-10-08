@@ -1,5 +1,5 @@
-# Binaries
-duplex
+# Root executable only
+/duplex
 *.exe
 *.dll
 *.so
